@@ -95,14 +95,10 @@ export function mapModel(modelId) {
 /**
  * Convert OpenAI messages format to Kimi Connect-JSON request payload.
  */
-export function buildRequestBody(modelParams, messages) {
-  // Extract text from the last message as the prompt
-  // In a robust implementation, we would map all history.
-  // For Kimi's chat API, we will just join the messages.
+export function buildRequestBody(modelParams, messages, chatId = null) {
   let prompt = "";
   for (const msg of messages) {
     if (Array.isArray(msg.content)) {
-      // Handle multimodal / array formats
       for (const part of msg.content) {
         if (part.type === "text") prompt += part.text + "\n";
       }
@@ -132,12 +128,28 @@ export function buildRequestBody(modelParams, messages) {
     },
   };
 
+  if (chatId) {
+    req.chatId = chatId;
+  }
+
   if (isAgent) {
     req.kimiplus_id = modelParams.kimiplusId;
     req.agentMode = modelParams.agentMode;
   }
 
   return req;
+}
+
+/**
+ * Extract chat ID from a parsed Connect-JSON response frame.
+ * Looks for {"op":"set","chat":{"id":"..."}} frames.
+ */
+export function extractChatId(parsed) {
+  if (!parsed || typeof parsed !== "object") return null;
+  if (parsed.op === "set" && parsed.chat && parsed.chat.id) {
+    return parsed.chat.id;
+  }
+  return null;
 }
 
 // ─── Connect-JSON Protocol Framing ───────────────────────────────────────

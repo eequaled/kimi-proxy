@@ -20,6 +20,7 @@ import {
   buildHeaders,
   mapModel,
   buildRequestBody,
+  extractChatId,
   frameConnectJson,
   parseConnectStream
 } from "./kimi-protocol.js";
@@ -35,6 +36,9 @@ const TOKEN_TTL_MS = 5 * 60 * 1000;
 // ─── Token Cache ──────────────────────────────────────────────────────────
 let cachedToken = null;
 let tokenExpiresAt = 0;
+
+// ─── Conversation Stickiness ───────────────────────────────────────────────
+let currentChatId = null;
 
 function getToken() {
   const now = Date.now();
@@ -170,8 +174,16 @@ async function handleMessages(req, res, payload) {
     return { role: m.role, content };
   });
 
+  // Reset heuristic: short message array means new conversation
+  if (openAiMessages.length <= 2) {
+    if (currentChatId) {
+      console.log(`[Stickiness] Reset — new conversation (messages.length=${openAiMessages.length})`);
+    }
+    currentChatId = null;
+  }
+
   const modelParams = mapModel(modelId);
-  const kimiBody = buildRequestBody(modelParams, openAiMessages);
+  const kimiBody = buildRequestBody(modelParams, openAiMessages, currentChatId);
   const bodyBuf = frameConnectJson(kimiBody);
 
   let token;
@@ -205,6 +217,10 @@ async function handleMessages(req, res, payload) {
     }
 
     if (upRes.statusCode !== 200) {
+      if (currentChatId) {
+        console.log(`[Stickiness] Cleared — upstream returned ${upRes.statusCode}`);
+        currentChatId = null;
+      }
       let errBody = "";
       upRes.on("data", c => errBody += c);
       upRes.on("end", () => {
@@ -266,6 +282,13 @@ async function processStreamResponse(upRes, clientRes, requestId, model) {
       const payload = frame.parsed;
       if (!payload) continue;
 
+      // Extract chatId for stickiness
+      const chatId = extractChatId(payload);
+      if (chatId && chatId !== currentChatId) {
+        currentChatId = chatId;
+        console.log(`[Stickiness] Captured chatId: ${currentChatId}`);
+      }
+
       if (!blockStarted) {
         sendEvent("content_block_start", { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } });
         blockStarted = true;
@@ -311,6 +334,13 @@ async function processBufferResponse(upRes, clientRes, requestId, model) {
       const payload = frame.parsed;
       if (!payload) continue;
 
+      // Extract chatId for stickiness
+      const chatId = extractChatId(payload);
+      if (chatId && chatId !== currentChatId) {
+        currentChatId = chatId;
+        console.log(`[Stickiness] Captured chatId: ${currentChatId}`);
+      }
+
       if (payload.op === "append" && payload.mask === "block.text.content" && payload.block?.text?.content) {
         textContent += payload.block.text.content;
       } else if (payload.op === "append" && payload.mask === "block.think.content" && payload.block?.think?.content) {
@@ -348,6 +378,7 @@ server.listen(PORT, () => {
   Upstream : ${UPSTREAM_URL}
   Token    : read from %APPDATA%\\kimi-desktop\\bridge-store\\token-store.json
   Auth key : ${PROXY_KEY}
+  Conv.    : Sticky (resets on restart / new conversation)
   Models   : ${MODELS.join(", ")}
   ──────────────────────────────────
   Claude Code CLI config:
