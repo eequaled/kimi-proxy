@@ -1,0 +1,7 @@
+proxy_requests.json
+upstream-response-raw.txt
+upstream-response-raw.bin
+*.log
+__pycache__/
+*.pyc
+*.code-workspace
