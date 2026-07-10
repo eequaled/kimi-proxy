@@ -1,0 +1,21 @@
+{
+  "name": "kimi-gateway",
+  "version": "1.0.0",
+  "description": "Local reverse proxy for Kimi desktop app, providing OpenAI and Anthropic compatible APIs",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "start": "node main.js",
+    "anthropic": "node anthropic.js",
+    "test-protocol": "node test-protocol.js"
+  },
+  "keywords": [
+    "kimi",
+    "proxy",
+    "openai",
+    "anthropic",
+    "llm"
+  ],
+  "author": "",
+  "license": "ISC"
+}

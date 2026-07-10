@@ -1,0 +1,5 @@
+# logs and tests
+proxy_requests.json
+upstream-response-raw.txt
+upstream-response-raw.bin
+*.log
